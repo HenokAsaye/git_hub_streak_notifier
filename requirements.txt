@@ -1,0 +1,3 @@
+pythonenv
+requests
+dotenv
