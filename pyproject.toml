@@ -1,0 +1,24 @@
+[project]
+name = "github-streak-notifier"
+version = "1.0.0"
+description = "A GitHub streak reminder that emails you daily to maintain your contribution streak."
+authors = [
+  { name="Henok Asaye", email="henokasaye77@gmail.com" }
+]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "requests",
+    "python-dotenv",
+    "schedule",
+]
+
+[project.scripts]
+streak_notifier = "streak_notifier.main:main"
+streak_notifier_start = "streak_notifier.scheduler:cli"
+cli_configuration = "streak_notifier.cli_configuration:configure_credentials"
+
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
