@@ -2,3 +2,4 @@ venv
 .env
 dist
 build
+github_streak_notifier.egg-info
