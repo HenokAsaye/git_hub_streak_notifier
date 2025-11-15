@@ -1,25 +1,33 @@
 import os
 import platform
+import sys
 from pathlib import Path
 from streak_notifier.main import main
 
 
 class NotifierScheduler:
-    def __init__(self, script_name="main.py", time="11:30"):
-        self.script_path = Path(__file__).parent / script_name
+    def __init__(self, time=None):
         self.time = time
         self.os_type = platform.system()
+        # Get the full path to the Python executable
+        self.python_path = sys.executable
 
     def _schedule_cron(self):
         user_crontab = os.popen("crontab -l 2>/dev/null").read()
         hour, minute = self.time.split(":")
-        cron_job = f"{int(minute)} {int(hour)} * * * python3 {self.script_path} # github-streak-notifier\n"
+        # Use full Python executable path
+        command = f'"{self.python_path}" -m streak_notifier.main'
+        cron_job = f"{int(minute)} {int(hour)} * * * {command} # github-streak-notifier\n"
 
         if cron_job not in user_crontab:
-            os.system(f'(crontab -l 2>/dev/null; echo "{cron_job}") | crontab -')
-            print(f"Cron job scheduled at {self.time} daily.")
+            result = os.system(f'(crontab -l 2>/dev/null; echo "{cron_job}") | crontab -')
+            if result == 0:
+                print(f"✅ Cron job scheduled at {self.time} daily.")
+                print(f"   Using Python: {self.python_path}")
+            else:
+                print(f"❌ Failed to create cron job. Error code: {result}")
         else:
-            print("Cron job already exists.")
+            print("⚠️  Cron job already exists.")
 
     def _remove_cron(self):
         cron = os.popen("crontab -l 2>/dev/null").read()
@@ -30,12 +38,32 @@ class NotifierScheduler:
         print("Cron job removed.")
 
     def _schedule_windows(self):
-        hour, minute = self.time.split(":")
         task_name = "GitHubStreakNotifier"
-        os.system(
-            f'schtasks /create /tn "{task_name}" /tr "python {self.script_path}" /sc daily /st {hour}:{minute} /f'
+        
+        # Create a batch file to ensure proper execution
+        batch_file = os.path.expanduser("~/.streak_notifier_run.bat")
+        
+        # Check if we're in a virtual environment
+        venv_path = os.path.dirname(os.path.dirname(self.python_path))
+        is_venv = os.path.exists(os.path.join(venv_path, "Scripts", "activate.bat"))
+        
+        with open(batch_file, "w") as f:
+            f.write("@echo off\n")
+            if is_venv:
+                # If in venv, activate it first
+                f.write(f'call "{os.path.join(venv_path, "Scripts", "activate.bat")}"\n')
+            f.write(f'"{self.python_path}" -m streak_notifier.main\n')
+        
+        # Schedule the batch file instead of direct Python command
+        result = os.system(
+            f'schtasks /create /tn "{task_name}" /tr "\"{batch_file}\"" /sc daily /st {self.time} /f'
         )
-        print(f"Windows Task '{task_name}' scheduled at {self.time} daily.")
+        if result == 0:
+            print(f"✅ Windows Task '{task_name}' scheduled at {self.time} daily.")
+            print(f"   Using Python: {self.python_path}")
+            print(f"   Batch file: {batch_file}")
+        else:
+            print(f"❌ Failed to create scheduled task. Error code: {result}")
 
     def _remove_windows_task(self):
         os.system('schtasks /delete /tn "GitHubStreakNotifier" /f')
@@ -62,13 +90,23 @@ class NotifierScheduler:
 
     def cli(self):
         print("📌 GitHub Streak Notifier Scheduler CLI")
-        print("1️⃣ Start daily notifications")
-        print("2️⃣ Stop daily notifications")
-        print("3️⃣ Run now (check and send email)")
+        print("1️⃣  Start daily notifications")
+        print("2️⃣  Stop daily notifications")
+        print("3️⃣  Run now (check and send email)")
         choice = input("Enter your choice (1/2/3): ")
 
         if choice == "1":
-            self.start()
+            time_input = input(
+                "Enter the time to send notifications (in HH:MM format, e.g., 14:30): "
+            )
+            try:
+                hour, minute = map(int, time_input.split(":"))
+                if not (0 <= hour < 24 and 0 <= minute < 60):
+                    raise ValueError
+                self.time = time_input
+                self.start()
+            except ValueError:
+                print("❌ Invalid time format. Please use HH:MM (24-hour format).")
         elif choice == "2":
             self.stop()
         elif choice == "3":
