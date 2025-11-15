@@ -2,21 +2,43 @@ import os
 import requests
 import smtplib
 from email.mime.text import MIMEText
-from datetime import date
+from datetime import date, datetime
 from dotenv import load_dotenv
 import random
+import traceback
 
+# Use consistent .env location in user's home directory
+ENV_FILE = os.path.expanduser("~/.streak_notifier.env")
+LOG_FILE = os.path.expanduser("~/.streak_notifier.log")
+
+def log_message(message):
+    """Log messages to file for debugging scheduled tasks"""
+    try:
+        with open(LOG_FILE, "a") as f:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"[{timestamp}] {message}\n")
+    except:
+        pass
 
 def load_env():
     """Load environment variables from .env file"""
-    load_dotenv()
-    return {
+    load_dotenv(ENV_FILE)
+    config = {
         "GITHUB_USERNAME": os.getenv("GITHUB_USERNAME"),
         "GITHUB_TOKEN": os.getenv("GITHUB_TOKEN"),
         "EMAIL": os.getenv("EMAIL"),
         "APP_PASSWORD": os.getenv("APP_PASSWORD"),
         "TO_EMAIL": os.getenv("TO_EMAIL", os.getenv("EMAIL")),
     }
+    
+    # Check if all required credentials are present
+    missing = [k for k, v in config.items() if not v]
+    if missing:
+        error_msg = f"Missing credentials: {', '.join(missing)}. Please run 'cli_configuration' first."
+        log_message(f"ERROR: {error_msg}")
+        raise ValueError(error_msg)
+    
+    return config
 
 
 def get_github_contribution(username, token):
@@ -92,7 +114,6 @@ def fetch_appreciation():
 
 
 def send_email(sender, app_password, recipient, subject, message):
-    """Send email via Gmail SMTP"""
     msg = MIMEText(message)
     msg["Subject"] = subject
     msg["From"] = sender
@@ -104,30 +125,37 @@ def send_email(sender, app_password, recipient, subject, message):
 
 
 def main():
-    config = load_env()
-
-    print("🔍 Checking your GitHub activity...")
-
-    data = get_github_contribution(config["GITHUB_USERNAME"], config["GITHUB_TOKEN"])
-    has_committed = committed_today(data)
-
-    if not has_committed:
-        message = fetch_motivation()
-        subject = "⚠️ Don't lose your GitHub streak!"
-    else:
-        message = fetch_appreciation()
-        subject = "🎉 Great job! You committed today!"
-
-    send_email(
-        config["EMAIL"],
-        config["APP_PASSWORD"],
-        config["TO_EMAIL"],
-        subject,
-        message
-    )
-
-    print("📩 Email sent successfully!")
-    print("✅" if has_committed else "⚠️ You haven’t committed yet — go push something!")
+    try:
+        log_message("Starting GitHub Streak Notifier")
+        config = load_env()
+        print("🔍 Checking your GitHub activity...")
+        log_message("Fetching GitHub contributions...")
+        data = get_github_contribution(config["GITHUB_USERNAME"], config["GITHUB_TOKEN"])
+        has_committed = committed_today(data)
+        if not has_committed:
+            message = fetch_motivation()
+            subject = "⚠️ Don't lose your GitHub streak!"
+        else:
+            message = fetch_appreciation()
+            subject = "🎉 Great job! You committed today!"
+        
+        log_message(f"Sending email to {config['TO_EMAIL']}...")
+        send_email(
+            config["EMAIL"],
+            config["APP_PASSWORD"],
+            config["TO_EMAIL"],
+            subject,
+            message
+        )
+        print("📩 Email sent successfully!")
+        log_message(f"Email sent successfully! Committed today: {has_committed}")
+        print("✅" if has_committed else "You haven't committed yet — go push something!")
+    except Exception as e:
+        error_msg = f"ERROR: {str(e)}\n{traceback.format_exc()}"
+        log_message(error_msg)
+        print(f"❌ Error: {str(e)}")
+        print(f"Check log file at: {LOG_FILE}")
+        raise
 
 
 if __name__ == "__main__":
