@@ -2,11 +2,14 @@ import os
 from dotenv import set_key, load_dotenv
 import signal
 
-def configure_credentials():
-    if not os.path.exists(".env"):
-        open(".env", "w").close()
+# Store .env in user's home directory for consistent access
+ENV_FILE = os.path.expanduser("~/.streak_notifier.env")
 
-    load_dotenv()
+def configure_credentials():
+    if not os.path.exists(ENV_FILE):
+        open(ENV_FILE, "w").close()
+
+    load_dotenv(ENV_FILE)
 
     credentials = {
         "GITHUB_USERNAME": input("Enter your GitHub username: "),
@@ -20,9 +23,10 @@ def configure_credentials():
         credentials["TO_EMAIL"] = credentials["EMAIL"]
 
     for key, value in credentials.items():
-        set_key(".env", key, value)
+        set_key(ENV_FILE, key, value)
 
-    print("Credentials saved successfully! You only need to do this once.")
+    print(f"✅ Credentials saved successfully to {ENV_FILE}")
+    print("You only need to do this once.")
 
 
 
